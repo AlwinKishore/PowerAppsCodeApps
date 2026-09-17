@@ -1,0 +1,94 @@
+{
+  "version": "1.0",
+  "appId": "02cf12b8-d2da-4afe-a686-a934268bd1d5",
+  "appDisplayName": "OCB_CFMS_POC",
+  "region": "prod",
+  "appType": "CodeApp",
+  "environmentId": "b4383a00-12b1-ee98-8d07-1d1b024d6cda",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {
+    "a1256961-7372-49ae-b6dc-df0a5c531169": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "displayName": "SharePoint",
+      "dataSources": [
+        "nsc",
+        "function",
+        "category",
+        "sub_category",
+        "ocbcfmsapprovalmatrix",
+        "approvalsubmissions",
+        "auditlogs",
+        "settings",
+        "approvalsubmissionsdocuments"
+      ],
+      "dataSets": {
+        "https://qantler.sharepoint.com/sites/OCBCFMSystem": {
+          "dataSources": {
+            "nsc": {
+              "tableName": "NSC"
+            },
+            "function": {
+              "tableName": "Function"
+            },
+            "category": {
+              "tableName": "Category"
+            },
+            "sub_category": {
+              "tableName": "Sub-category"
+            },
+            "ocbcfmsapprovalmatrix": {
+              "tableName": "OCB CFMS Approval Matrix"
+            },
+            "approvalsubmissions": {
+              "tableName": "ApprovalSubmissions"
+            },
+            "auditlogs": {
+              "tableName": "AuditLogs"
+            },
+            "settings": {
+              "tableName": "Settings"
+            },
+            "approvalsubmissionsdocuments": {
+              "tableName": "ApprovalSubmissionsDocuments"
+            }
+          }
+        }
+      }
+    },
+    "e7a289e2-03c5-48ed-8f01-e25759b40ec5": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "uploadattachmenttoapprovalsubmissions"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "5b6551b1-bdad-f111-aaab-7ced8daf5908",
+        "workflowDisplayName": "Upload Attachment to Approval Submissions",
+        "workflowName": "012d497c-d67e-c298-2874-bd6076397b18",
+        "dependencies": {
+          "shared_sharepointonline": "a1256961-7372-49ae-b6dc-df0a5c531169"
+        }
+      }
+    },
+    "c2c942e6-e0f1-4618-be57-2caf66905f6d": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "createocbcfmsrecordwithnsc"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "13dfd7eb-aeb1-f111-aaab-7ced8daf5908",
+        "workflowDisplayName": "Create OCB CFMS Record with NSC",
+        "workflowName": "03f408a1-94be-ba19-4989-5cef9ad0cac4",
+        "dependencies": {
+          "shared_sharepointonline": "a1256961-7372-49ae-b6dc-df0a5c531169"
+        }
+      }
+    }
+  },
+  "databaseReferences": {}
+}
