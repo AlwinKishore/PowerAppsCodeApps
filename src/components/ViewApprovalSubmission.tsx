@@ -12,20 +12,25 @@ import type { ApprovalSubmissionsRead, ApprovalSubmissionsWrite, AttachmentTypeV
 import type { AuditLogsRead, AuditLogsWrite } from '../generated/models/AuditLogsModel'
 import { BsGlobe } from 'react-icons/bs'
 import { getCurrentUser, includesCurrentUser } from './userAccess'
+import { ApprovalSubmissionAttachmentRetrievalusingItemIDService } from '../generated'
+import { ConfirmationDialog } from './ConfirmationDialog'
 
 type Person = { '@odata.type': string; Claims: string; DisplayName: string; Email: string; Picture: string; Department: string; JobTitle: string }
 type Option = { id: number; title: string; users?: Person[]; categoryId?: number; categoryTitle?: string }
 type StatusMap = Record<string, StatusValue>
 type AttachmentTypeMap = Record<string, AttachmentTypeValue>
+type ApprovalAction = 'Approve' | 'Reject' | 'Rework'
 type SubmissionAttachment = {
   Id: string
   AbsoluteUri: string
   DisplayName: string
   '@odata.type': string
 }
-type AttachmentFlowResponse = { attachments?: unknown } | unknown[]
+type AttachmentFlowResponse = {
+  data: any
+} | unknown[]
 
-const attachmentFlowUrl = 'https://b4383a0012b1ee988d071d1b024d6c.da.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/c6d4c08b30884bb2987bc90beeb21bc2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=TP97xbvIG4UUFbfhI0OE1zY_4aVEubN9Iq2Du7kIQJE'
+//const attachmentFlowUrl = 'https://b4383a0012b1ee988d071d1b024d6c.da.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/c6d4c08b30884bb2987bc90beeb21bc2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=TP97xbvIG4UUFbfhI0OE1zY_4aVEubN9Iq2Du7kIQJE'
 
 type FormState = {
   nsc: Option | null; functionName: Option | null; category: Option | null; subcategory: Option | null
@@ -53,6 +58,7 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
   const [contextUser, setContextUser] = useState<{name:string, email:string, principal:string, claims:string}>({name:'', email:'', principal:'', claims:''})
   const [currentContext, setCurrentContext] = useState<{ user?: { fullName?: string; email?: string; userPrincipalName?: string } } | null>(null)
   const [commentMode, setCommentMode] = useState<{reviewerEditable:boolean, fulfillerEditable:boolean}>({reviewerEditable:false, fulfillerEditable:false})
+  const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -186,18 +192,9 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
       })
   }
 
-  const updateSubmission = async (_requestedStatus: string, actionName: 'Approve' | 'Reject' | 'Rework') => {
+  const updateSubmission = async (_requestedStatus: string, actionName: ApprovalAction) => {
     if (saving) return
-    const commentRequired = commentMode.reviewerEditable && actionName !== 'Approve' && !reviewerComments.trim()
-    if (commentRequired) {
-      setMessage('Reviewer comments are required before this action.')
-      return
-    }
-    const fulfillerRequired = commentMode.fulfillerEditable && actionName !== 'Approve' && !fulfillerComments.trim()
-    if (fulfillerRequired) {
-      setMessage('Fulfiller comments are required before this action.')
-      return
-    }
+    if (!validateActionComments(actionName)) return
 
     const statusValue = form.status
     const desiredStatus = getStatusObjectFor(statusValue)
@@ -301,6 +298,25 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
     }
   }
 
+  const validateActionComments = (actionName: ApprovalAction) => {
+    const commentRequired = commentMode.reviewerEditable && actionName !== 'Approve' && !reviewerComments.trim()
+    if (commentRequired) {
+      setMessage('Reviewer comments are required before this action.')
+      return false
+    }
+    const fulfillerRequired = commentMode.fulfillerEditable && actionName !== 'Approve' && !fulfillerComments.trim()
+    if (fulfillerRequired) {
+      setMessage('Fulfiller comments are required before this action.')
+      return false
+    }
+    return true
+  }
+
+  const requestAction = (actionName: ApprovalAction) => {
+    if (saving || !validateActionComments(actionName)) return
+    setPendingAction(actionName)
+  }
+
   const resolvedStatusValueForAction = (actionName: 'Approve' | 'Reject' | 'Rework', currentStatus: string, _reviewer: Person | null, fulfillerCount: number): StatusValue => {
     if (actionName === 'Approve' && currentStatus.toLowerCase() === 'pending with reviewer') {
       return fulfillerCount > 0 ? getStatusObjectFor('Pending with Fulfiller') || { '@odata.type': '#Microsoft.Azure.Connectors.SharePoint.SPListExpandedReference', Value: 'Pending with Fulfiller', Id: 0 } : getStatusObjectFor('Approved') || { '@odata.type': '#Microsoft.Azure.Connectors.SharePoint.SPListExpandedReference', Value: 'Approved', Id: 0 }
@@ -401,9 +417,9 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
           <button className='action-button back-button' onClick={onBack}>Back</button>
         ) : (
           <>
-            <button className='action-button approve-button' disabled={saving} aria-busy={saving} onClick={() => void updateSubmission(form.status, 'Approve')}>Approve</button>
-            <button className='action-button reject-button' disabled={saving} aria-busy={saving} onClick={() => void updateSubmission(form.status, 'Reject')}>Reject</button>
-            <button className='action-button rework-button' disabled={saving} aria-busy={saving} onClick={() => void updateSubmission(form.status, 'Rework')}>Rework</button>
+            <button className='action-button approve-button' disabled={saving} aria-busy={saving} onClick={() => requestAction('Approve')}>Approve</button>
+            <button className='action-button reject-button' disabled={saving} aria-busy={saving} onClick={() => requestAction('Reject')}>Reject</button>
+            <button className='action-button rework-button' disabled={saving} aria-busy={saving} onClick={() => requestAction('Rework')}>Rework</button>
             <button className='action-button back-button' onClick={onBack}>Back</button>
           </>
         )}
@@ -422,6 +438,7 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
         </table>
       </div>
     </section>
+    {pendingAction && <ConfirmationDialog action={pendingAction} onConfirm={() => { const action = pendingAction; setPendingAction(null); void updateSubmission(form.status, action) }} onCancel={() => setPendingAction(null)} />}
   </main>
 }
 
@@ -495,24 +512,25 @@ async function loadAttachmentsFromFlow(
   itemId: number,
   onLoaded: (attachments: SubmissionAttachment[]) => void
 ): Promise<void> {
-  const response = await fetch(attachmentFlowUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({
-      itemid: itemId,
-    }),
-  });
+  // const response = await fetch(attachmentFlowUrl, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     'Accept': 'application/json',
+  //   },
+  //   body: JSON.stringify({
+  //     itemid: itemId,
+  //   }),
+  // });
+  const response = await ApprovalSubmissionAttachmentRetrievalusingItemIDService.Run({ text : String(itemId) })
 
-  if (!response.ok) {
-    throw new Error(
-      `Attachment flow request failed with status ${response.status}`
-    );
-  }
+  // if (!response.ok) {
+  //   throw new Error(
+  //     `Attachment flow request failed with status ${response.status}`
+  //   );
+  // }
 
-  const result = await response.json() as AttachmentFlowResponse;
+  const result = await response as AttachmentFlowResponse;
 
   onLoaded(extractFlowAttachments(result))
 }
@@ -521,7 +539,7 @@ function extractFlowAttachments(value: AttachmentFlowResponse): SubmissionAttach
   const candidates = Array.isArray(value)
     ? value
     : value && typeof value === 'object'
-      ? value.attachments
+      ? value?.data?.attachments
       : []
   if (!Array.isArray(candidates)) return []
   return candidates.reduce<SubmissionAttachment[]>((result, candidate) => {

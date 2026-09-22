@@ -13,11 +13,13 @@ import type { AuditLogsWrite } from '../generated/models/AuditLogsModel'
 import { BsGlobe } from "react-icons/bs";
 import { CreateOCBCFMSRecordwithNSCService, UploadAttachmenttoApprovalSubmissionsService } from '../generated'
 import { getCurrentUser, includesCurrentUser } from './userAccess'
+import { ConfirmationDialog } from './ConfirmationDialog'
 
 type Person = { '@odata.type': string; Claims: string; DisplayName: string; Email: string; Picture: string; Department: string; JobTitle: string }
 type Option = { id: number; title: string; users?: Person[]; categoryId?: number; categoryTitle?: string }
 type StatusMap = Record<string, StatusValue>
 type AttachmentTypeMap = Record<string, AttachmentTypeValue>
+type ConfirmationAction = 'Send for Approval'
 type RequiredFieldKey = 'nsc' | 'functionName' | 'category' | 'subcategory' | 'contractingParty'
 type RequiredFieldMap = Record<RequiredFieldKey, boolean>
 type FormState = {
@@ -42,15 +44,22 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [validationErrors, setValidationErrors] = useState<RequiredFieldMap>(emptyRequiredMap)
+  const [pendingAction, setPendingAction] = useState<ConfirmationAction | null>(null)
 
   useEffect(() => {
     Promise.all([getCurrentUser(), NSCService.getAll(), FunctionService.getAll(), CategoryService.getAll(), Sub_categoryService.getAll()])
-      .then(([currentUser, nsc, functions, categories, subcategories]) => setOptions({
-        nsc: nsc.data.filter((item) => includesCurrentUser(item.Users, currentUser.email)).map((item) => ({ id: item.ID ?? 0, title: item.Title, users: getPeople(item.Users) })),
-        functionName: functions.data.map((item) => ({ id: item.ID ?? 0, title: item.Title })),
-        category: categories.data.map((item) => ({ id: item.ID ?? 0, title: item.Title })),
-        subcategory: subcategories.data.map((item) => ({ id: item.ID ?? 0, title: item.Title, categoryId: item.Category?.Id ?? 0, categoryTitle: item.Category?.Value ?? '' })),
-      }))
+      .then(([currentUser, nsc, functions, categories, subcategories]) => {
+        const allNscOptions = nsc.data.map((item) => ({ id: item.ID ?? 0, title: item.Title, users: getPeople(item.Users) }))
+        const userNscOptions = allNscOptions.filter((item) => includesCurrentUser(nsc.data.find((nscItem) => nscItem.ID === item.id)?.Users, currentUser.email))
+        const fallbackNsc = userNscOptions.length === 0 && allNscOptions.length === 1 ? allNscOptions[0] : null
+        setOptions({
+          nsc: userNscOptions,
+          functionName: functions.data.map((item) => ({ id: item.ID ?? 0, title: item.Title })),
+          category: categories.data.map((item) => ({ id: item.ID ?? 0, title: item.Title })),
+          subcategory: subcategories.data.map((item) => ({ id: item.ID ?? 0, title: item.Title, categoryId: item.Category?.Id ?? 0, categoryTitle: item.Category?.Value ?? '' })),
+        })
+        if (fallbackNsc) setForm((current) => ({ ...current, nsc: fallbackNsc }))
+      })
       .catch(() => setMessage('Unable to load form values from SharePoint.'))
     ApprovalSubmissionsService.getReferencedEntity('', 'Status')
       .then((result) => {
@@ -181,12 +190,12 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
     }
   };
 
-  const save = async (requestedStatus: string, actionName = 'Save') => {
+  const validateSubmission = (requestedStatus: string) => {
     const missingRequired = requiredFieldMatch(form)
     if (Object.values(missingRequired).some(Boolean)) {
       setValidationErrors(missingRequired)
       setMessage('Please select NSC, Function, Category, Sub-category, and Contracting Party.')
-      return
+      return false
     }
     const nsc = form.nsc
     const functionName = form.functionName
@@ -195,19 +204,31 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
     if (!nsc || !functionName || !category || !subcategory || !form.contractingParty.trim()) {
       setValidationErrors(requiredFieldMatch(form))
       setMessage('Please select NSC, Function, Category, Sub-category, and Contracting Party.')
-      return
+      return false
     }
 
     const desiredStatus = requestedStatus === 'Pending with Reviewer' && !form.reviewer ? 'Pending with Fulfiller' : requestedStatus
     if (desiredStatus === 'Pending with Fulfiller' || desiredStatus === 'Pending with Reviewer') {
       if (!form.reviewer && instruction.fulfillerPeople.length === 0) {
         window.alert('No fulfiller is assigned for the selected NSC, Function, Category, and Sub-category. Please contact the administration.')
-        return
-      }
-      if (!window.confirm('Do you want to send this submission for approval?')) {
-        return;
+        return false
       }
     }
+    if (!getStatusObjectFor(desiredStatus)) {
+      setMessage('Unable to resolve the selected status in SharePoint.')
+      return false
+    }
+    return true
+  }
+
+  const save = async (requestedStatus: string, actionName = 'Save') => {
+    if (!validateSubmission(requestedStatus)) return
+
+    const nsc = form.nsc
+    const functionName = form.functionName
+    const category = form.category
+    const subcategory = form.subcategory
+    const desiredStatus = requestedStatus === 'Pending with Reviewer' && !form.reviewer ? 'Pending with Fulfiller' : requestedStatus
     const resolvedStatus = getStatusObjectFor(desiredStatus)
     if (!resolvedStatus) {
       setMessage('Unable to resolve the selected status in SharePoint.')
@@ -283,7 +304,9 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
   const filteredSubcategories = form.category ? options.subcategory.filter((item) => item.categoryId === form.category?.id || item.categoryTitle === form.category?.title) : []
   const visibleInstruction = form.nsc && form.category && form.subcategory ? instruction : { submission: noInstruction, fulfiller: noInstruction, fulfillers: '', fulfillerPeople: [] as Person[] }
   const sendForApproval = () => {
-    void save(form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller', 'Send for Approval')
+    const requestedStatus = form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller'
+    if (!validateSubmission(requestedStatus)) return
+    setPendingAction('Send for Approval')
   }
 
   return <main className="page-content new-submission-page">
@@ -291,7 +314,7 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
     <div className="page-heading"><p>New Approval Submission</p><span>Today is Thursday, 10 Sep 2026</span></div>
     <section className="form-section"><h2>Basic Information</h2>
       <div className="form-grid">
-        <Field label="NSC " required={true}><Select value={form.nsc?.title || ''} placeholder="Find NSC" options={options.nsc} onChange={(value) => selectOption('nsc', value)} error={validationErrors.nsc} /></Field>
+        <Field label="NSC " required={true}>{options.nsc.length === 0 ? <input value={form.nsc?.title || ''} readOnly className={validationErrors.nsc ? 'field-error-control' : ''} /> : <Select value={form.nsc?.title || ''} placeholder="Find NSC" options={options.nsc} onChange={(value) => selectOption('nsc', value)} error={validationErrors.nsc} />}</Field>
         <Field label="Function " required={true}><Select value={form.functionName?.title || ''} placeholder="Find function" options={options.functionName} onChange={(value) => selectOption('functionName', value)} error={validationErrors.functionName} /></Field>
         <Field label="Category " required={true}><Select value={form.category?.title || ''} placeholder="Find category" options={options.category} onChange={(value) => selectOption('category', value)} error={validationErrors.category} /></Field>
         <Field label="Sub-category " required={true}><Select value={form.subcategory?.title || ''} placeholder="Find sub-category" options={filteredSubcategories} onChange={(value) => selectOption('subcategory', value)} error={validationErrors.subcategory} /></Field>
@@ -330,6 +353,7 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
       <button className="primary-action send-for-approval-btn" disabled={saving} aria-busy={saving} onClick={sendForApproval}>Send for Approval</button>
       <button onClick={onBack}>Back</button>
     </div>
+    {pendingAction && <ConfirmationDialog action={pendingAction} onConfirm={() => { setPendingAction(null); void save(form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller', 'Send for Approval') }} onCancel={() => setPendingAction(null)} />}
   </main>
 }
 

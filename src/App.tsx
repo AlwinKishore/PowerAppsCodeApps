@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { ApprovalSubmissionsService } from './generated/services/ApprovalSubmissionsService'
 import type { ApprovalSubmissionsRead } from './generated/models/ApprovalSubmissionsModel'
@@ -11,11 +11,13 @@ import { Footer } from './components/Footer'
 import { SearchPanel } from './components/SearchPanel'
 import { ActionButtons } from './components/ActionButtons'
 import { SubmissionList } from './components/SubmissionList'
+import { ApprovalSubmissionsLazyScreen } from './components/ApprovalSubmissionsLazyScreen'
 import { NewApprovalSubmission } from './components/NewApprovalSubmission'
 import { EditApprovalSubmission } from './components/EditApprovalSubmission'
 import { ViewApprovalSubmission } from './components/ViewApprovalSubmission'
 import type { FilterValues, Submission } from './components/types'
 import { getCurrentUser, includesCurrentUser } from './components/userAccess'
+import type { IGetAllOptions } from './generated/models/CommonModels'
 
 const mapSubmission = (item: ApprovalSubmissionsRead): Submission => ({
   id: item.ID ?? 0,
@@ -35,55 +37,73 @@ const mapSubmission = (item: ApprovalSubmissionsRead): Submission => ({
 
 const emptyFilters: FilterValues = { nsc: '', functionName: '', category: '', subcategory: '', contractingParty: '', status: '' }
 
-const pendingStatuses = ['Pending with Reviewer', 'Pending with Fulfillers']
-const requiredSubmissionFieldsFilter = 'NSC/Title ne null and Function/Title ne null'
+const pendingStatuses = ['Pending with Reviewer', 'Pending with Fulfiller']
+const requiredSubmissionFieldsFilter = 'NSC/Title ne null'
 const pageSize = 100
 
 const escapeODataValue = (value: string) => value.replace(/'/g, "''")
 
-const buildSharePointFilter = (filters: FilterValues, tab: string) => {
+const buildSharePointFilter = (filters: FilterValues, tab: string, userEmail = '') => {
   const clauses = [
     filters.nsc && `NSC/Title eq '${escapeODataValue(filters.nsc)}'`,
     filters.functionName && `Function/Title eq '${escapeODataValue(filters.functionName)}'`,
     filters.category && `Category/Title eq '${escapeODataValue(filters.category)}'`,
     filters.subcategory && `Subcategory/Title eq '${escapeODataValue(filters.subcategory)}'`,
     filters.contractingParty && `ContractingPartyName eq '${escapeODataValue(filters.contractingParty)}'`,
-    filters.status && `Status eq '${escapeODataValue(filters.status)}'`,
+    filters.status && `Status eq '${escapeODataValue(filters.status) == 'Pending with Fulfillers' ? 'Pending with Fulfiller' : escapeODataValue(filters.status)}'`,
   ].filter((clause): clause is string => Boolean(clause))
-
-  if (tab !== 'All' && !filters.status) {
-    clauses.push(`(Status eq 'Pending with Reviewer' or Status eq 'Pending with Fulfiller' or Status eq 'Pending with Fulfillers')`)
+  
+  if (filters.status === "") {
+    if (tab !== 'All' && userEmail ) {
+      const escapedEmail = escapeODataValue(userEmail.toLowerCase())
+      clauses.push(`(Status eq 'Pending with Reviewer' and Reviewer/EMail eq '${escapedEmail}') or (Status eq 'Pending with Fulfiller' and (Fulfiller1/EMail eq '${escapedEmail}' or Fulfiller2/EMail eq '${escapedEmail}' or Fulfiller3/EMail eq '${escapedEmail}'))`)
+    }
+  }
+  else{
+    if (tab !== 'All' && userEmail && filters.status === 'Pending with Reviewer') {
+      const escapedEmail = escapeODataValue(userEmail.toLowerCase())
+      clauses.push(`(Status eq 'Pending with Reviewer' and Reviewer/EMail eq '${escapedEmail}')`)
+    }
+    if (tab !== 'All' && userEmail && (filters.status === 'Pending with Fulfillers' || filters.status === 'Pending with Fulfiller')) {
+      const escapedEmail = escapeODataValue(userEmail.toLowerCase())
+      clauses.push(`(Status eq 'Pending with Fulfiller' and (Fulfiller1/EMail eq '${escapedEmail}' or Fulfiller2/EMail eq '${escapedEmail}' or Fulfiller3/EMail eq '${escapedEmail}'))`)
+    }
   }
 
+  if (tab === 'All' && userEmail && clauses.length === 0) {
+    const escapedEmail = escapeODataValue(userEmail.toLowerCase())
+    clauses.push(`((Status eq 'Draft' or Status eq 'Pending for Resubmission') and Author/EMail eq '${escapedEmail}') or (Status eq 'Pending with Reviewer' or Status eq 'Pending with Fulfiller' or Status eq 'Approved' or Status eq 'Rejected')`)
+  }
+  // console.log('SharePoint filter:', [requiredSubmissionFieldsFilter, ...clauses].join(' and '));
   return [requiredSubmissionFieldsFilter, ...clauses].join(' and ')
 }
 
-const matchesCurrentUserOnApprovalSubmission = (item: ApprovalSubmissionsRead, userEmail: string) => {
-  if (!userEmail) return true
+const matchesCurrentUserOnApprovalSubmission = (item: ApprovalSubmissionsRead, userEmail: string, tab: string = 'All') => {
+  // if (!userEmail) return true
   const normalizedEmail = userEmail.toLowerCase()
-  const people = [item.Author?.Email, item.Reviewer?.Email, item.Fulfiller1?.Email, item.Fulfiller2?.Email, item.Fulfiller3?.Email]
-  return people.some((personEmail) => typeof personEmail === 'string' && personEmail.toLowerCase() === normalizedEmail)
+  if (item.Status?.Value === 'Pending with Reviewer' && tab !== 'All') {
+    return item.Reviewer?.Email?.toLowerCase() === normalizedEmail
+  }
+  if (item.Status?.Value === 'Pending with Fulfiller' && tab !== 'All') {
+    const people = [item.Fulfiller1?.Email, item.Fulfiller2?.Email, item.Fulfiller3?.Email]
+    return people.some((personEmail) => typeof personEmail === 'string' && personEmail.toLowerCase() === normalizedEmail)
+  }
+  if (item.Status?.Value === 'Draft' || item.Status?.Value === 'Pending for Resubmission' && tab == 'All') {
+    return item.Author?.Email?.toLowerCase() === normalizedEmail
+  }
+  return true
 }
-
-const belongsToUser = (item: Submission, userName: string) => {
-  if (!userName) return false
-  const normalizedUserName = userName.toLowerCase()
-  return item.reviewer.toLowerCase().includes(normalizedUserName)
-    || item.fulfiller.toLowerCase().includes(normalizedUserName)
-}
-
-const isPendingStatus = (status: string) => pendingStatuses.some((pendingStatus) =>
-  status.toLowerCase().replace('fulfillers', 'fulfiller') === pendingStatus.toLowerCase().replace('fulfillers', 'fulfiller'))
 
 function App() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [activeTab, setActiveTab] = useState('All')
-  const [page, setPage] = useState<'list' | 'new' | 'edit' | 'view'>('list')
+  const [page, setPage] = useState<'list' | 'lazy-list' | 'new' | 'edit' | 'view'>('lazy-list')
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [filters, setFilters] = useState<FilterValues>(emptyFilters)
   const [connectionMessage, setConnectionMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [listPage, setListPage] = useState(1)
   const [totalSubmissions, setTotalSubmissions] = useState<number | null>(null)
   const [hasNextPage, setHasNextPage] = useState(false)
@@ -93,24 +113,35 @@ function App() {
   const [subcategoriesByCategory, setSubcategoriesByCategory] = useState<Record<string, string[]>>({})
   const pageTokens = useRef<Record<number, string>>({})
 
-  const loadSubmissions = useCallback(async (nextFilters: FilterValues, nextTab = 'All', nextPage = 1) => {
+  const loadSubmissions = useCallback(async (nextFilters: FilterValues, nextTab = 'All', nextPage = 1, currentPage = 1) => {
+    void currentPage
     setIsLoading(true)
     setConnectionMessage('')
     try {
-      const sharePointFilter = buildSharePointFilter(nextFilters, nextTab)
+      const sharePointFilter = buildSharePointFilter(nextFilters, nextTab, currentUserEmail)
+      // const lastItem = submissions.length > 0 ? submissions[submissions.length - 1] : null;
+      let cursorClause = '';
+      // if (lastItem) {
+      //   cursorClause = (currentPage < nextPage) ? `(ID lt ${lastItem.id})` : `(ID gt ${lastItem.id})`;
+      // }
+      const updatedSharePointFilter = [sharePointFilter, cursorClause]
+        .filter(Boolean)
+        .map(clause => `(${clause})`)
+        .join(' and ') || undefined;
       if (nextPage === 1) pageTokens.current = {}
       const skip = (nextPage - 1) * pageSize
-      const result = await ApprovalSubmissionsService.getAll({
-        filter: sharePointFilter || undefined,
-        orderBy: ['Created desc', 'ID desc'],
+      const options: IGetAllOptions = {
+        filter: updatedSharePointFilter || undefined,
         top: pageSize,
-        skip,
-        count: true,
-      })
+        skip: skip,
+        orderBy: ["Created desc", 'ID desc'],
+        count: true
+      };
+      const result = await ApprovalSubmissionsService.getAll(options)
       const mappedSubmissions = result.data
-        .filter((item) => matchesCurrentUserOnApprovalSubmission(item, currentUserEmail))
+        .filter((item) => matchesCurrentUserOnApprovalSubmission(item, currentUserEmail, nextTab))
         .map(mapSubmission)
-        .filter((item) => nextTab === 'All' || (isPendingStatus(item.status) && belongsToUser(item, loggedInUser)))
+        // .filter((item) => nextTab === 'All' || (isPendingStatus(item.status) && belongsToUser(item, loggedInUser)))
       if (!nextFilters.status) {
         setFilterOptions((current) => ({
           ...current,
@@ -130,6 +161,45 @@ function App() {
     }
   }, [currentUserEmail, loggedInUser])
 
+  const loadMoreSubmissions = useCallback(async (nextFilters: FilterValues, nextTab: string, nextPage: number) => {
+    if (isLoadingMore || !hasNextPage) return
+    setIsLoadingMore(true)
+    setConnectionMessage('')
+    try {
+      const sharePointFilter = buildSharePointFilter(nextFilters, nextTab, currentUserEmail)
+      const lastItem = submissions.length > 0 ? submissions[submissions.length - 1] : null;
+      let cursorClause = '';
+      if (lastItem) {
+        cursorClause = `(ID lt ${lastItem.id})`;
+      }
+
+      const updatedSharePointFilter = [sharePointFilter, cursorClause]
+        .filter(Boolean)
+        .map(clause => `(${clause})`)
+        .join(' and ') || undefined;
+
+      const options: IGetAllOptions = {
+        filter: updatedSharePointFilter,
+        top: pageSize,
+        // no `skip` — cursor-based paging replaces it
+        orderBy: ["Created desc", "ID desc"],
+        count: true
+      };
+      const result = await ApprovalSubmissionsService.getAll(options)
+      const nextSubmissions = result.data
+        .filter((item) => matchesCurrentUserOnApprovalSubmission(item, currentUserEmail, nextTab))
+        .map(mapSubmission)
+      setSubmissions((current) => [...current, ...nextSubmissions])
+      setListPage(nextPage)
+      setTotalSubmissions(result.count ?? null)
+      setHasNextPage(Boolean(result.skipToken) || result.data.length === pageSize)
+    } catch {
+      setConnectionMessage('Unable to load more data.')
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [currentUserEmail, hasNextPage, isLoadingMore])
+
   useEffect(() => {
     let mounted = true
     getCurrentUser()
@@ -138,7 +208,7 @@ function App() {
         setLoggedInUser(currentUser.name)
         setCurrentUserEmail(currentUser.email)
         return Promise.all([
-          ApprovalSubmissionsService.getAll({ filter: buildSharePointFilter(emptyFilters, 'All'), orderBy: ['Created desc'], top: pageSize, count: true }),
+          ApprovalSubmissionsService.getAll({ filter: buildSharePointFilter(emptyFilters, 'All', currentUser.email), orderBy: ['Created desc'], top: pageSize, count: true, maxPageSize: pageSize }),
           NSCService.getAll(),
           FunctionService.getAll(),
           CategoryService.getAll(),
@@ -150,7 +220,7 @@ function App() {
           const [submissionsResult, nscResult, functionResult, categoryResult, subcategoryResult] = results
           const userNscs = nscResult.data.filter((item) => includesCurrentUser(item.Users, userEmail))
           const mappedSubmissions = submissionsResult.data
-            .filter((item) => matchesCurrentUserOnApprovalSubmission(item, userEmail))
+            .filter((item) => matchesCurrentUserOnApprovalSubmission(item, userEmail, activeTab))
             .map(mapSubmission)
           setSubmissions(mappedSubmissions)
           setListPage(1)
@@ -182,13 +252,6 @@ function App() {
     return () => { mounted = false }
   }, [loadSubmissions])
 
-  const filteredSubmissions = useMemo(() => submissions.filter((item) => {
-    const matches = (value: string, filter: string) => !filter || value.toLowerCase().includes(filter.toLowerCase())
-    return matches(item.nsc, filters.nsc) && matches(item.functionName, filters.functionName) && matches(item.category, filters.category)
-      && matches(item.subcategory, filters.subcategory) && matches(item.contractingParty, filters.contractingParty) && matches(item.status, filters.status)
-      && (activeTab === 'All' || (isPendingStatus(item.status) && belongsToUser(item, loggedInUser)))
-  }), [submissions, filters, activeTab, loggedInUser])
-
   const totalPages = totalSubmissions === null
     ? listPage + (hasNextPage ? 1 : 0)
     : Math.max(1, Math.ceil(totalSubmissions / pageSize))
@@ -203,11 +266,20 @@ function App() {
     setFilters(emptyFilters)
     void loadSubmissions(emptyFilters, activeTab)
   }
+  const onRefresh = () => {
+    void loadSubmissions(filters, activeTab)
+  }
   const navigateToList = () => {
     void loadSubmissions(filters, activeTab)
     setPage('list')
     window.location.hash = 'list'
     document.getElementById('approval-submission-list')?.scrollIntoView({ behavior: 'smooth' })
+  }
+  const navigateToLazyList = () => {
+    void loadSubmissions(filters, activeTab)
+    setPage('lazy-list')
+    window.location.hash = 'lazy-list'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   const navigateToNew = () => {
     setPage('new')
@@ -226,13 +298,41 @@ function App() {
     window.location.hash = 'view'
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+  const onTabChange = (tab: string) => {    
+    setSubmissions([]);
+    setActiveTab(tab)
+    void loadSubmissions(emptyFilters, tab)
+    setFilters(emptyFilters)
+  }
 
   return (
     <div className="app-shell">
-      <Header onApprovalSubmissionsClick={navigateToList} />
+      <Header onApprovalSubmissionsClick={navigateToLazyList} />
       {page === 'new' ? <NewApprovalSubmission onBack={navigateToList} onSaved={navigateToList} /> : page === 'edit' && selectedSubmissionId ?
         <EditApprovalSubmission submissionId={selectedSubmissionId} onBack={navigateToList} onSaved={navigateToList} /> : page === 'view' && selectedSubmissionId ?
-        <ViewApprovalSubmission submissionId={selectedSubmissionId} onBack={navigateToList} /> : <>
+        <ViewApprovalSubmission submissionId={selectedSubmissionId} onBack={navigateToList} /> : page === 'lazy-list' ? 
+        <ApprovalSubmissionsLazyScreen
+          submissions={submissions}
+          currentUser={loggedInUser}
+          filters={filters}
+          activeTab={activeTab}
+          searchOpen={searchOpen}
+          options={searchOptions}
+          subcategoriesByCategory={subcategoriesByCategory}
+          connectionMessage={connectionMessage}
+          isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
+          hasMore={hasNextPage}
+          onToggleSearch={() => setSearchOpen((open) => !open)}
+          onChangeFilter={updateFilter}
+          onReset={resetFilters}
+          onSearch={() => { setSearchOpen(true); void loadSubmissions(filters, activeTab) }}
+          onTabChange={onTabChange}
+          onNewRequest={navigateToNew}
+          onEdit={navigateToEdit}
+          onView={navigateToView}
+          onLoadMore={() => { void loadMoreSubmissions(filters, activeTab, listPage + 1) }}
+        /> : <>
       <main className="page-content">
         <div className="page-heading">
           <p>Approval Submissions</p>
@@ -245,7 +345,7 @@ function App() {
           options={searchOptions} 
           subcategoriesByCategory={subcategoriesByCategory}
           activeTab={activeTab} 
-          onTabChange={(tab) => { setActiveTab(tab); void loadSubmissions(filters, tab) }} 
+          onTabChange={onTabChange} 
           onToggle={() => setSearchOpen((open) => !open)} 
           onChange={updateFilter} 
           onReset={resetFilters} 
@@ -254,17 +354,17 @@ function App() {
         {connectionMessage && <div className="connection-message">{connectionMessage}</div>}
         <div className="results-heading">
           <strong>Search Results</strong>
-          <ActionButtons onReset={resetFilters} onNewRequest={navigateToNew} />
+          <ActionButtons onReset={onRefresh} onNewRequest={navigateToNew} />
         </div>
         {isLoading ? 
             <div id="approval-submission-list" className="list-message">Loading data...</div> 
           : 
             <>
-              <div id="approval-submission-list"><SubmissionList submissions={filteredSubmissions} onEdit={navigateToEdit} onView={navigateToView} /></div>
+              <div id="approval-submission-list"><SubmissionList currentUser={loggedInUser} submissions={submissions} onEdit={navigateToEdit} onView={navigateToView} /></div>
               <div className="pagination" aria-label="Submission list pagination">
                 <button type="button" onClick={() => void loadSubmissions(filters, activeTab, listPage - 1)} disabled={listPage === 1 || isLoading}>Previous</button>
                 <span>Page {listPage} of {totalPages}</span>
-                <button type="button" onClick={() => void loadSubmissions(filters, activeTab, listPage + 1)} disabled={(!hasNextPage && listPage >= totalPages) || isLoading}>Next</button>
+                <button type="button" onClick={() => { void loadSubmissions(filters, activeTab, listPage + 1)}} disabled={(!hasNextPage && listPage >= totalPages) || isLoading}>Next</button>
               </div>
             </>
         }

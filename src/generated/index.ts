@@ -4,6 +4,8 @@
  */
 
 // Models
+export * as ApprovalSubmissionAttachmentDeleteModel from './models/ApprovalSubmissionAttachmentDeleteModel';
+export * as ApprovalSubmissionAttachmentRetrievalusingItemIDModel from './models/ApprovalSubmissionAttachmentRetrievalusingItemIDModel';
 export * as ApprovalSubmissionsDocumentsModel from './models/ApprovalSubmissionsDocumentsModel';
 export * as ApprovalSubmissionsModel from './models/ApprovalSubmissionsModel';
 export * as AuditLogsModel from './models/AuditLogsModel';
@@ -14,11 +16,14 @@ export * as CreateOCBCFMSRecordwithNSCModel from './models/CreateOCBCFMSRecordwi
 export * as FunctionModel from './models/FunctionModel';
 export * as NSCModel from './models/NSCModel';
 export * as OCBCFMSApprovalMatrixModel from './models/OCBCFMSApprovalMatrixModel';
+export * as Office365UsersModel from './models/Office365UsersModel';
 export * as SettingsModel from './models/SettingsModel';
 export * as Sub_categoryModel from './models/Sub_categoryModel';
 export * as UploadAttachmenttoApprovalSubmissionsModel from './models/UploadAttachmenttoApprovalSubmissionsModel';
 
 // Services
+export * from './services/ApprovalSubmissionAttachmentDeleteService';
+export * from './services/ApprovalSubmissionAttachmentRetrievalusingItemIDService';
 export * from './services/ApprovalSubmissionsDocumentsService';
 export * from './services/ApprovalSubmissionsService';
 export * from './services/AuditLogsService';
@@ -28,6 +33,7 @@ export * from './services/CreateOCBCFMSRecordwithNSCService';
 export * from './services/FunctionService';
 export * from './services/NSCService';
 export * from './services/OCBCFMSApprovalMatrixService';
+export * from './services/Office365UsersService';
 export * from './services/SettingsService';
 export * from './services/Sub_categoryService';
 export * from './services/UploadAttachmenttoApprovalSubmissionsService';

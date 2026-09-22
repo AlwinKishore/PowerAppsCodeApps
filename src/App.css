@@ -129,8 +129,8 @@
 }
 
 .user-profile {
-    width: 45px;
-    height: 58px;
+    width: 60px;
+    height: 60px;
     margin-right: 8px;
     overflow: hidden;
     border-radius: 0;
@@ -388,6 +388,14 @@
     color: #999;
     background: #f1f1f1;
     cursor: not-allowed;
+}
+
+.lazy-loading-status {
+    min-height: 24px;
+    padding: 5px 0 9px;
+    color: #27778a;
+    text-align: center;
+    font-size: 13px;
 }
 
 .submission-card {
@@ -805,6 +813,80 @@
 .action-section-buttons .back-button {
     color: #27778a;
     background: #fff;
+}
+
+.confirmation-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.confirmation-dialog {
+    width: min(100%, 300px);
+    overflow: hidden;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.confirmation-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    color: #fff;
+    background: #27778a;
+}
+
+.confirmation-dialog-header h2 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.confirmation-dialog-close {
+    padding: 0;
+    border: 0;
+    color: #fff;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.confirmation-dialog p {
+    margin: 0;
+    padding: 14px 16px 10px;
+    color: #222;
+    font-size: 13px;
+    text-align: center;
+}
+
+.confirmation-dialog-actions {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 16px 10px;
+}
+
+.confirmation-dialog-button {
+    min-width: 60px;
+    padding: 5px 12px;
+    border: 1px solid #27778a;
+    border-radius: 3px;
+    color: #fff;
+    background: #27778a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.confirmation-dialog-button:hover,
+.confirmation-dialog-button:focus-visible {
+    background: #1e6576;
 }
 
 .submission-card p {

@@ -88,6 +88,44 @@
           "shared_sharepointonline": "a1256961-7372-49ae-b6dc-df0a5c531169"
         }
       }
+    },
+    "9c45c3a0-7601-4a32-892e-a9dcb34eb6e4": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "approvalsubmissionattachmentretrievalusingitemid"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "a1e5724e-56b2-f111-aaab-7ced8daf54ef",
+        "workflowDisplayName": "Approval Submission Attachment Retrieval using Item ID",
+        "workflowName": "d12277de-014f-4fd6-6797-6a78613dd491",
+        "dependencies": {
+          "shared_sharepointonline": "a1256961-7372-49ae-b6dc-df0a5c531169"
+        }
+      }
+    },
+    "955cc0fe-0895-4ac3-9476-a2c40e1104e1": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "approvalsubmissionattachmentdelete"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "90700082-60b2-f111-aaab-7ced8daf5908",
+        "workflowDisplayName": "Approval Submission Attachment Delete",
+        "workflowName": "08ee1b98-dfc1-b04c-2032-5f1806ab382a",
+        "dependencies": {
+          "shared_sharepointonline": "a1256961-7372-49ae-b6dc-df0a5c531169"
+        }
+      }
+    },
+    "be6f402b-8c52-4287-82f9-a36212b1bdce": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+      "displayName": "Office 365 Users",
+      "dataSources": [
+        "office365users"
+      ],
+      "dataSets": {}
     }
   },
   "databaseReferences": {}

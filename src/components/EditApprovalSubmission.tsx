@@ -11,20 +11,24 @@ import { OCBCFMSApprovalMatrixService } from '../generated/services/OCBCFMSAppro
 import type { ApprovalSubmissionsWrite, AttachmentTypeValue, StatusValue } from '../generated/models/ApprovalSubmissionsModel'
 import type { AuditLogsRead, AuditLogsWrite } from '../generated/models/AuditLogsModel'
 import { BsGlobe } from 'react-icons/bs'
-import { UploadAttachmenttoApprovalSubmissionsService } from '../generated'
+import { ApprovalSubmissionAttachmentDeleteService, ApprovalSubmissionAttachmentRetrievalusingItemIDService, UploadAttachmenttoApprovalSubmissionsService } from '../generated'
 import { getCurrentUser, includesCurrentUser } from './userAccess'
+import { ConfirmationDialog } from './ConfirmationDialog'
 
 type Person = { '@odata.type': string; Claims: string; DisplayName: string; Email: string; Picture: string; Department: string; JobTitle: string }
 type Option = { id: number; title: string; users?: Person[]; categoryId?: number; categoryTitle?: string }
 type StatusMap = Record<string, StatusValue>
 type AttachmentTypeMap = Record<string, AttachmentTypeValue>
+type ConfirmationAction = 'Send for Approval'
 type SubmissionAttachment = {
   Id: string
   AbsoluteUri: string
   DisplayName: string
   '@odata.type': string
 }
-type AttachmentFlowResponse = { attachments?: unknown } | unknown[]
+type AttachmentFlowResponse = {
+  data: any
+} | unknown[]
 type RequiredFieldKey = 'nsc' | 'functionName' | 'category' | 'subcategory' | 'contractingParty'
 type RequiredFieldMap = Record<RequiredFieldKey, boolean>
 type FormState = {
@@ -37,7 +41,7 @@ const emptyRequiredMap: RequiredFieldMap = { nsc: false, functionName: false, ca
 const emptyForm: FormState = { nsc: null, functionName: null, category: null, subcategory: null, contractingParty: '', contractValidity: '', link: '', remarks: '', attachmentTypes: [], reviewer: null, status: '' }
 const noInstruction = 'No instruction have been provided'
 var submissionID: number;
-const attachmentFlowUrl = 'https://b4383a0012b1ee988d071d1b024d6c.da.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/c6d4c08b30884bb2987bc90beeb21bc2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=TP97xbvIG4UUFbfhI0OE1zY_4aVEubN9Iq2Du7kIQJE'
+//const attachmentFlowUrl = 'https://b4383a0012b1ee988d071d1b024d6c.da.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/c6d4c08b30884bb2987bc90beeb21bc2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=TP97xbvIG4UUFbfhI0OE1zY_4aVEubN9Iq2Du7kIQJE'
 const deleteAttachmentFlowUrl = 'https://b4383a0012b1ee988d071d1b024d6c.da.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/19/workflows/6c72e487c018457cb9afb3324b5b98ab/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=81AjAcGKuLYVcwCDfZRhIR78CydfiInUtSYFR8D2IqU'
 
 export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { submissionId: number; onBack: () => void; onSaved: () => void }) {
@@ -55,6 +59,7 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [validationErrors, setValidationErrors] = useState<RequiredFieldMap>(emptyRequiredMap)
+  const [pendingAction, setPendingAction] = useState<ConfirmationAction | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -243,12 +248,12 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
 
   const filteredSubcategories = form.category ? options.subcategory.filter((item) => item.categoryId === form.category?.id || item.categoryTitle === form.category?.title) : []
 
-  const save = async (requestedStatus: string, actionName = 'Save') => {
+  const validateSubmission = (requestedStatus: string) => {
     const missingRequired = requiredFieldMatch(form)
     if (Object.values(missingRequired).some(Boolean)) {
       setValidationErrors(missingRequired)
       setMessage('Please select NSC, Function, Category, Sub-category, and Contracting Party.')
-      return
+      return false
     }
     const nsc = form.nsc
     const functionName = form.functionName
@@ -257,19 +262,32 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
     if (!nsc || !functionName || !category || !subcategory || !form.contractingParty.trim()) {
       setValidationErrors(requiredFieldMatch(form))
       setMessage('Please select NSC, Function, Category, Sub-category, and Contracting Party.')
-      return
+      return false
     }
 
     const desiredStatus = requestedStatus === 'Pending with Reviewer' && !form.reviewer ? 'Pending with Fulfiller' : requestedStatus
     if (desiredStatus === 'Pending with Fulfiller' || desiredStatus === 'Pending with Reviewer') {
       if (!form.reviewer && instruction.fulfillerPeople.length === 0) {
         window.alert('No fulfiller is assigned for the selected NSC, Function, Category, and Sub-category. Please contact the administration.')
-        return
-      }
-      if (!window.confirm('Do you want to send this submission for approval?')) {
-        return
+        return false
       }
     }
+    if (!getStatusObjectFor(desiredStatus)) {
+      setMessage('Unable to resolve the selected status in SharePoint.')
+      return false
+    }
+    return true
+  }
+
+  const save = async (requestedStatus: string, actionName = 'Save') => {
+    if (!validateSubmission(requestedStatus)) return
+
+    const nsc = form.nsc
+    const functionName = form.functionName
+    const category = form.category
+    const subcategory = form.subcategory
+    if (!nsc || !functionName || !category || !subcategory || !form.contractingParty.trim()) return
+    const desiredStatus = requestedStatus === 'Pending with Reviewer' && !form.reviewer ? 'Pending with Fulfiller' : requestedStatus
 
     const resolvedStatus = getStatusObjectFor(desiredStatus)
     if (!resolvedStatus) {
@@ -332,7 +350,9 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
   }
 
   const sendForApproval = () => {
-    void save(form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller', 'Send for Approval')
+    const requestedStatus = form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller'
+    if (!validateSubmission(requestedStatus)) return
+    setPendingAction('Send for Approval')
   }
 
   const removeAttachment = (attachment: SubmissionAttachment) => {
@@ -385,6 +405,7 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
       <button className='primary-action send-for-approval-btn' disabled={saving} aria-busy={saving} onClick={sendForApproval}>Send for Approval</button>
       <button onClick={onBack}>Back</button>
     </div>
+    {pendingAction && <ConfirmationDialog action={pendingAction} onConfirm={() => { setPendingAction(null); void save(form.reviewer ? 'Pending with Reviewer' : 'Pending with Fulfiller', 'Send for Approval') }} onCancel={() => setPendingAction(null)} />}
     <section className='form-section audit-section'><h2>Audit Logs</h2>
       <div className='audit-log-table'>
         <table>
@@ -463,25 +484,6 @@ function extractAttachments(value: { Id?: string; AbsoluteUri?: string; DisplayN
   }, [])
 }
 
-async function loadAttachmentsFromFlow(
-  itemId: number,
-  onLoaded: (attachments: SubmissionAttachment[]) => void
-): Promise<void> {
-  const response = await fetch(attachmentFlowUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ itemid: itemId }),
-  })
-  if (!response.ok) {
-    throw new Error(`Attachment flow request failed with status ${response.status}`)
-  }
-  const result = await response.json() as AttachmentFlowResponse
-  onLoaded(extractFlowAttachments(result))
-}
-
 async function deleteRemovedAttachments(attachmentIds: string[]): Promise<void> {
   if (attachmentIds.length === 0) return
   if (!deleteAttachmentFlowUrl) {
@@ -491,24 +493,51 @@ async function deleteRemovedAttachments(attachmentIds: string[]): Promise<void> 
 }
 
 async function deleteAttachmentFromFlow(submissionID: number, attachmentId: string): Promise<void> {
-  const response = await fetch(deleteAttachmentFlowUrl as string, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ itemid: submissionID, attachmentid: attachmentId }),
-  })
-  if (!response.ok) {
-    throw new Error(`Attachment delete flow request failed with status ${response.status}`)
-  }
+  // const response = await fetch(deleteAttachmentFlowUrl as string, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     Accept: 'application/json',
+  //   },
+  //   body: JSON.stringify({ itemid: submissionID, attachmentid: attachmentId }),
+  // })
+  // if (!response.ok) {
+  //   throw new Error(`Attachment delete flow request failed with status ${response.status}`)
+  // }
+  await ApprovalSubmissionAttachmentDeleteService.Run({ number: submissionID, text: String(attachmentId) })
+}
+async function loadAttachmentsFromFlow(
+  itemId: number,
+  onLoaded: (attachments: SubmissionAttachment[]) => void
+): Promise<void> {
+  // const response = await fetch(attachmentFlowUrl, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     'Accept': 'application/json',
+  //   },
+  //   body: JSON.stringify({
+  //     itemid: itemId,
+  //   }),
+  // });
+  const response = await ApprovalSubmissionAttachmentRetrievalusingItemIDService.Run({ text : String(itemId) })
+
+  // if (!response.ok) {
+  //   throw new Error(
+  //     `Attachment flow request failed with status ${response.status}`
+  //   );
+  // }
+
+  const result = await response as AttachmentFlowResponse;
+
+  onLoaded(extractFlowAttachments(result))
 }
 
 function extractFlowAttachments(value: AttachmentFlowResponse): SubmissionAttachment[] {
   const candidates = Array.isArray(value)
     ? value
     : value && typeof value === 'object'
-      ? value.attachments
+      ? value?.data?.attachments
       : []
   if (!Array.isArray(candidates)) return []
   return candidates.reduce<SubmissionAttachment[]>((result, candidate) => {
