@@ -385,23 +385,35 @@ export function ViewApprovalSubmission({ submissionId, onBack }: { submissionId:
 
     <section className='form-section'><h2>Approvers</h2>
       <div className='approver-grid'>
-        <div className='approver-row'>
-          <span className='approver-label'>Reviewer</span>
-          <span className='approver-value'>{form.reviewer?.DisplayName || '—'}</span>
-          <span className='approver-label'>Reviewer Actioned Date</span>
-          <span className='approver-value'>{reviewerActionedDate ? new Date(reviewerActionedDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</span>
+        <div className=''>
+          <div className="reviewer-row">
+            <div className="reviewer-column">
+              <span className='approver-label'>Reviewer</span>
+              <span className='approver-value'>{form.reviewer?.DisplayName || '—'}</span>
+            </div>
+            <div className="reviewer-column">
+              <span className='approver-label'>Reviewer Actioned Date</span>
+              <span className='approver-value'>{reviewerActionedDate ? new Date(reviewerActionedDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</span>
+            </div>
+          </div>
         </div>
         <div className='approver-row comments-row'>
           <span className='approver-label'>Reviewer Comments</span>
           <textarea className={commentMode.reviewerEditable ? 'comment-box' : 'comment-box readonly'} value={reviewerComments} readOnly={!commentMode.reviewerEditable} onChange={(e) => setReviewerComments(e.target.value)} placeholder='Enter reviewer comments' />
         </div>
-        <div className='approver-row'>
-          <span className='approver-label'>Fulfillers</span>
-          <span className='approver-value'>{instruction.fulfillers || '—'}</span>
-          <span className='approver-label'>Fulfiller Actioned By</span>
-          <span className='approver-value'>{fulfillerActionedBy?.DisplayName || '—'}</span>
-          <span className='approver-label'>Fulfiller Actioned Date</span>
-          <span className='approver-value'>{fulfillerActionedDate ? new Date(fulfillerActionedDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</span>
+        <div className='reviewer-row'>
+          <div className="fulfiller-row">
+            <span className='approver-label'>Fulfillers</span>
+            <span className='approver-value'>{instruction.fulfillers || '—'}</span>
+          </div>
+          <div className="fulfiller-row">
+            <span className='approver-label'>Fulfiller Actioned By</span>
+            <span className='approver-value'>{fulfillerActionedBy?.DisplayName || '—'}</span>
+          </div>
+          <div className="fulfiller-row">
+            <span className='approver-label'>Fulfiller Actioned Date</span>
+            <span className='approver-value'>{fulfillerActionedDate ? new Date(fulfillerActionedDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</span>
+          </div>
         </div>
         <div className='approver-row comments-row'>
           <span className='approver-label'>Fulfiller Comments</span>
