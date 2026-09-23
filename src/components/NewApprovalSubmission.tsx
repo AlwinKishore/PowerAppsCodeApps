@@ -311,7 +311,7 @@ export function NewApprovalSubmission({ onBack, onSaved }: { onBack: () => void;
 
   return <main className="page-content new-submission-page">
     {saving && <div className="page-loader-overlay" role="status" aria-live="polite"><span className="page-loader-spinner" aria-hidden="true" /><span>Saving approval submission...</span></div>}
-    <div className="page-heading"><p>New Approval Submission</p><span>Today is Thursday, 10 Sep 2026</span></div>
+    <div className="page-heading"><p>New Approval Submission</p><span>Today is {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
     <section className="form-section"><h2>Basic Information</h2>
       <div className="form-grid">
         <Field label="NSC " required={true}>{options.nsc.length === 0 ? <input value={form.nsc?.title || ''} readOnly className={validationErrors.nsc ? 'field-error-control' : ''} /> : <Select value={form.nsc?.title || ''} placeholder="Find NSC" options={options.nsc} onChange={(value) => selectOption('nsc', value)} error={validationErrors.nsc} />}</Field>

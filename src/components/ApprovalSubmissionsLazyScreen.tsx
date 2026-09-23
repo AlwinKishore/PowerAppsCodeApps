@@ -53,7 +53,7 @@ export function ApprovalSubmissionsLazyScreen({
   return <main className="page-content lazy-list-screen">
     <div className="page-heading">
       <p>Approval Submissions</p>
-      <span>Today is Wednesday, 09 Sep 2026</span>
+      <span>Today is {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span>
     </div>
     <br />
     <SearchPanel

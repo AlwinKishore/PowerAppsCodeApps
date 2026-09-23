@@ -3,9 +3,11 @@ import { getContext } from '@microsoft/power-apps/app'
 import { Office365UsersService } from '../generated/services/Office365UsersService'
 type HeaderProps = {
   onApprovalSubmissionsClick: () => void
+  onApprovalTableClick: () => void
+  onDocumentExtractionClick: () => void
 }
 
-export function Header({ onApprovalSubmissionsClick }: HeaderProps) {
+export function Header({ onApprovalSubmissionsClick, onApprovalTableClick, onDocumentExtractionClick }: HeaderProps) {
   const [photoUrl, setPhotoUrl] = useState('')
   const [displayName, setDisplayName] = useState('Logged-in user')
 
@@ -38,6 +40,8 @@ export function Header({ onApprovalSubmissionsClick }: HeaderProps) {
       <strong className="omron-logo">OMRON</strong>
       <div className="brand-actions">
         <button className="approval-nav" onClick={onApprovalSubmissionsClick}>Approval Submissions</button>
+        <button className="approval-nav" onClick={onApprovalTableClick}>Submission Table</button>
+        <button className="approval-nav" onClick={onDocumentExtractionClick}>Document Extraction</button>
         {/* <button className="approval-nav" onClick={onLazyApprovalSubmissionsClick}>Paged Approval Submissions</button> */}
         <span className="user-profile" title={displayName}>
           {photoUrl ? <img src={photoUrl} alt={`${displayName} profile`} onError={() => setPhotoUrl('')} /> : <span className="user-fallback" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}

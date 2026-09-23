@@ -15,6 +15,9 @@ import { ApprovalSubmissionsLazyScreen } from './components/ApprovalSubmissionsL
 import { NewApprovalSubmission } from './components/NewApprovalSubmission'
 import { EditApprovalSubmission } from './components/EditApprovalSubmission'
 import { ViewApprovalSubmission } from './components/ViewApprovalSubmission'
+import { ApprovalSubmissionDataTable } from './components/ApprovalSubmissionDataTable'
+import { DocumentExtractionPage } from './components/DocumentExtractionPage'
+import { SupportChatbot } from './components/SupportChatbot'
 import type { FilterValues, Submission } from './components/types'
 import { getCurrentUser, includesCurrentUser } from './components/userAccess'
 import type { IGetAllOptions } from './generated/models/CommonModels'
@@ -97,7 +100,7 @@ const matchesCurrentUserOnApprovalSubmission = (item: ApprovalSubmissionsRead, u
 function App() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [activeTab, setActiveTab] = useState('All')
-  const [page, setPage] = useState<'list' | 'lazy-list' | 'new' | 'edit' | 'view'>('lazy-list')
+  const [page, setPage] = useState<'list' | 'lazy-list' | 'table' | 'document-extraction' | 'new' | 'edit' | 'view'>('lazy-list')
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [filters, setFilters] = useState<FilterValues>(emptyFilters)
@@ -281,6 +284,17 @@ function App() {
     window.location.hash = 'lazy-list'
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+  const navigateToTable = () => {
+    void loadSubmissions(filters, activeTab)
+    setPage('table')
+    window.location.hash = 'table'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const navigateToDocumentExtraction = () => {
+    setPage('document-extraction')
+    window.location.hash = 'document-extraction'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const navigateToNew = () => {
     setPage('new')
     window.location.hash = 'new'
@@ -307,8 +321,9 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header onApprovalSubmissionsClick={navigateToLazyList} />
-      {page === 'new' ? <NewApprovalSubmission onBack={navigateToList} onSaved={navigateToList} /> : page === 'edit' && selectedSubmissionId ?
+      <Header onApprovalSubmissionsClick={navigateToLazyList} onApprovalTableClick={navigateToTable} onDocumentExtractionClick={navigateToDocumentExtraction} />
+      {page === 'new' ? <NewApprovalSubmission onBack={navigateToList} onSaved={navigateToList} /> : page === 'document-extraction' ?
+        <DocumentExtractionPage onBack={navigateToLazyList} /> : page === 'edit' && selectedSubmissionId ?
         <EditApprovalSubmission submissionId={selectedSubmissionId} onBack={navigateToList} onSaved={navigateToList} /> : page === 'view' && selectedSubmissionId ?
         <ViewApprovalSubmission submissionId={selectedSubmissionId} onBack={navigateToList} /> : page === 'lazy-list' ? 
         <ApprovalSubmissionsLazyScreen
@@ -332,11 +347,18 @@ function App() {
           onEdit={navigateToEdit}
           onView={navigateToView}
           onLoadMore={() => { void loadMoreSubmissions(filters, activeTab, listPage + 1) }}
-        /> : <>
+        /> : page === 'table' ? <main className="page-content">
+          <div className="page-heading">
+            <p>Approval Submissions Table</p>
+            <span>Today is {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span>
+          </div>
+          {connectionMessage && <div className="connection-message">{connectionMessage}</div>}
+          {isLoading ? <div className="list-message">Loading data...</div> : <ApprovalSubmissionDataTable submissions={submissions} currentUser={loggedInUser} onEdit={navigateToEdit} onView={navigateToView} />}
+        </main> : <>
       <main className="page-content">
         <div className="page-heading">
           <p>Approval Submissions</p>
-          <span>Today is Wednesday, 09 Sep 2026</span>
+          <span>Today is {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span>
         </div>
         <br></br>
         <SearchPanel 
@@ -371,6 +393,7 @@ function App() {
       </main>
       </>}
       <Footer />
+      <SupportChatbot />
     </div>
   )
 }

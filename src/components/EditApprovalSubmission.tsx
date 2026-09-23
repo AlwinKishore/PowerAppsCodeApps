@@ -362,7 +362,7 @@ export function EditApprovalSubmission({ submissionId, onBack, onSaved }: { subm
 
   return <main className="page-content new-submission-page">
     {saving && <div className="page-loader-overlay" role="status" aria-live="polite"><span className="page-loader-spinner" aria-hidden="true" /><span>Updating approval submission...</span></div>}
-    <div className="page-heading"><p>Edit Approval Submission</p><span>Today is Wednesday, 09 Sep 2026</span></div>
+    <div className="page-heading"><p>Edit Approval Submission</p><span>Today is {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
     <section className="form-section"><h2>Basic Information</h2>
       <div className="form-grid">
         <Field label="NSC" required={true}><input value={form.nsc?.title || ''} readOnly className={validationErrors.nsc ? 'field-error-control' : ''} /></Field>
